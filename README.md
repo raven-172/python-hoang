@@ -14,7 +14,8 @@
 
 **Project implementation**
   Project will be implented following stages:
-    1. Identify analysis purpose and decied the  way to collect data
+    
+  1. Identify analysis purpose and decied the  way to collect data
   - Realizing retail segemnt have 2 main activities (including inventory management and sales), then business efficiency is impacted by those.
   - In order to understand the current situation of Retail segment, the project will focus on sales reports and goods reports.
   - Identify KPIs are used for sale tracking, including:
@@ -30,5 +31,6 @@
     * Value of goods sold cancelled
     * Number of inventory checking and difference values
   - All of reports can be got from Retail segment's system sales management software
-    2. Data cleaning
+
+  2. Data cleaning
     
