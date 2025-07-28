@@ -33,4 +33,5 @@
   - All of reports can be got from Retail segment's system sales management software
 
   2. Data cleaning
-    
+    <img width="1176" height="659" alt="image" src="https://github.com/user-attachments/assets/4f211003-6c38-4edb-b1b1-956077fbe40c" />
+
