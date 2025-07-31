@@ -72,3 +72,15 @@ DELIMITER ',' CSV HEADER;
 /*Check result*/
 SELECT * FROM invoices_list
 ORDER BY invoice_date;
+
+SELECT
+    s.store_name, 
+    EXTRACT(YEAR FROM i.invoice_date) AS invoice_year,
+    EXTRACT(MONTH FROM i.invoice_date) AS invoice_month,
+    ROUND(AVG(EXTRACT(EPOCH FROM MAX(i.invoice_date) - MIN(i.invoice_date))/3600),2) AS avg_hours_per_day,
+    COUNT(*)/EXTRACT(EPOCH FROM MAX(i.invoice_date) - MIN(i.invoice_date)/3600) AS invoice_per_hour,
+
+
+/*Create table with all insight relate with sale*/
+CREATE TABLE report AS
+    SELECT 
