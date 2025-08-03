@@ -1,3 +1,4 @@
+
 /*Create table about STORES*/
 CREATE TABLE store_list(
     store_id NUMERIC PRIMARY KEY,
@@ -70,33 +71,49 @@ FROM 'C:/thmart/sale_list/sale_list_add.csv'
 DELIMITER ',' CSV HEADER;
 
 /*Check result*/
+SELECT * FROM invoices_list;
 
-WITH 
-daily_report AS (
-    SELECT 
-        s.store_name,
-        DATE(i.invoice_date) AS sale_day,
-        COALESCE(EXTRACT(EPOCH FROM MAX(i.invoice_date) - MIN(i.invoice_date))/3600, 0) AS total_hours_day,
-        COUNT(*) AS amount_invoice,
-        COALESCE(COUNT(*)/NULLIF(EXTRACT(EPOCH FROM MAX(i.invoice_date)-MIN(i.invoice_date))/3600,0),0) AS invoice_per_hour,
-        SUM(i.invoice_value) - COALESCE(SUM(r.return_value),0) AS net_income,
-        SUM(i.invoice_value) - COALESCE(SUM(r.return_value),0)/COUNT(*) AS average_invoice_value,
-        COALESCE(SUM(i.invoice_discount),0) AS discount_per_day,
-        SUM(i.invoice_value) AS income_per_day
-    FROM invoices_list i
-    LEFT JOIN  store_list s ON s.store_id = i.store_id
-    LEFT JOIN returns_list r ON r.return_id = i.return_id
-    GROUP BY s.store_name, sale_day
-)
+/*Query information that show needed insights*/
+WITH
+    sum_report AS (
+        SELECT
+            s.store_name,
+            i.invoice_id,
+            i.invoice_date,
+            i.invoice_value,
+            i.invoice_discount,
+            r.return_value
+        FROM invoices_list i
+        LEFT JOIN store_list s ON s.store_id = i.store_id
+        LEFT JOIN returns_list r ON r.return_id = i.return_id
+    ),
 
-    SELECT
-        store_name,
-        EXTRACT(YEAR FROM sale_day) AS invoice_year,
-        EXTRACT(MONTH FROM sale_day) AS invoice_month,
-        ROUND(AVG(total_hours_day),2) AS operating_time,
-        ROUND(AVG(invoice_per_hour),2) AS avg_inv_per_hour,
-        SUM(net_income) AS total_net_income,
-        SUM(net_income)/SUM(amount_invoice) AS avg_invoice_value,
-        ROUND(SUM(discount_per_day)/SUM(income_per_day),2) AS discount_income_rate
-    FROM daily_report
-    GROUP BY invoice_year, invoice_month, daily_report.store_name;
+    daily_report AS (
+        SELECT
+            store_name,
+            DATE(invoice_date) AS sale_date,
+            EXTRACT(EPOCH FROM(MAX(invoice_date) - MIN(invoice_date)))/3600 AS operating_time_day,
+            COUNT(*) AS num_invoice_day,
+            SUM(invoice_value) AS total_income_day,
+            SUM(invoice_discount) AS total_discount_day,
+            SUM(return_value) AS total_return_day
+        FROM sum_report
+        GROUP BY sale_date, store_name
+        HAVING EXTRACT(EPOCH FROM(MAX(invoice_date) - MIN(invoice_date)))/3600 > 0
+    )
+
+        SELECT
+            store_name,
+            EXTRACT(YEAR FROM sale_date) AS sale_year,
+            EXTRACT(MONTH FROM sale_date) AS sale_month,
+            SUM(total_income_day - COALESCE(total_discount_day,0) - COALESCE(total_return_day,0)) AS net_revenue,
+            ROUND(AVG(operating_time_day),2) AS operating_time,
+            FLOOR(COALESCE(SUM(num_invoice_day)/NULLIF(SUM(operating_time_day),0),0)) AS sale_per_hour,
+            ROUND(SUM(total_income_day - COALESCE(total_discount_day,0) - COALESCE(total_return_day,0))/SUM(num_invoice_day),2) AS avg_value_sale,
+            ROUND(SUM(COALESCE(total_discount_day,0))/SUM(total_income_day),2) AS discount_rate,
+            SUM(COALESCE(total_return_day,0)) AS return_value_month
+        FROM daily_report
+        GROUP BY store_name, sale_year, sale_month;
+
+
+             
