@@ -142,6 +142,16 @@ DELIMITER ',' CSV HEADER;
 SELECT * FROM inventory_report;
 
 /*Query information that show needed insights*/
+CREATE TABLE monthly_inventory_report AS (
+    SELECT
+        sl.store_name,
+        TO_CHAR(ir.report_date,'YYYY-MM') AS inventory_year_month,
+        ir.inventory_value AS begin_inventory_value
+    FROM inventory_report ir
+    LEFT JOIN store_list sl ON sl.store_id = ir.store_id
+);
+
+CREATE TABLE thmart_report AS (
 WITH
     daily_sale_report AS (
         SELECT
@@ -185,21 +195,11 @@ WITH
         FROM stock_take_list stl
         LEFT JOIN store_list sl ON sl.store_id = stl.store_id
         GROUP BY DATE(stl.stock_take_date), sl.store_name
-    ),
-
-    monthly_inventory_report AS (
-        SELECT
-            sl.store_name,
-            DATE(ir.report_date) AS inventory_verify_date,
-            ir.inventory_value AS begin_inventory_value
-        FROM inventory_report ir
-        LEFT JOIN store_list sl ON sl.store_id = ir.store_id
-    )   
+    )
 
 SELECT
     dsr.store_name,
-    EXTRACT(YEAR FROM dsr.sale_date) AS the_year,
-    EXTRACT(MONTH FROM dsr.sale_date) AS the_month,
+    TO_CHAR(dsr.sale_date, 'YYYY-MM') AS year_month,
     SUM(dsr.total_income_day)
         - SUM(COALESCE(dsr.total_discount_day,0))
         - SUM(COALESCE(drr.total_return_value_day,0)) AS net_income,
@@ -218,12 +218,27 @@ SELECT
     ,0),2) AS discount_rate,
     SUM(COALESCE(drr.total_return_value_day,0)) AS return_value_month,
     SUM(COALESCE(ddr.total_damage_value_day,0)) AS damage_value_month,
-    SUM(COALESCE(dcr.total_check_value_day,0)) AS diff_value_month,
-    SUM(COALESCE(mir.begin_inventory_value,0)) AS inventory_value_ready
+    SUM(COALESCE(dcr.total_check_value_day,0)) AS diff_value_month
 FROM daily_sale_report dsr
 LEFT JOIN daily_return_report drr ON drr.store_name = dsr.store_name AND drr.return_day = dsr.sale_date
 LEFT JOIN daily_damage_report ddr ON ddr.store_name = ddr.store_name AND ddr.damage_day = dsr.sale_date
 LEFT JOIN daily_check_report dcr ON dcr.store_name = dsr.store_name AND dcr.check_date = dsr.sale_date
-LEFT JOIN monthly_inventory_report mir ON mir.store_name = dsr.store_name AND mir.inventory_verify_date = dsr.sale_date
-GROUP BY dsr.store_name, the_year, the_month
-ORDER BY dsr.store_name, the_year, the_month;
+GROUP BY dsr.store_name, year_month
+ORDER BY dsr.store_name, year_month
+);
+
+SELECT
+    tr.store_name,
+    tr.year_month,
+    tr.net_income,
+    tr.avg_operating_time,
+    tr.sale_per_hour,
+    tr.avg_value_per_sale,
+    tr.discount_rate,
+    tr.return_value_month,
+    tr.damage_value_month,
+    tr.diff_value_month,
+    mir.begin_inventory_value
+FROM thmart_report tr
+LEFT JOIN monthly_inventory_report mir ON tr.store_name = mir.store_name AND tr.year_month = mir.inventory_year_month
+ORDER BY tr.store_name, tr.year_month;
