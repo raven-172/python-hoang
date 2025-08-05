@@ -240,5 +240,6 @@ SELECT
     tr.diff_value_month,
     mir.begin_inventory_value
 FROM thmart_report tr
-LEFT JOIN monthly_inventory_report mir ON tr.store_name = mir.store_name AND tr.year_month = mir.inventory_year_month
+LEFT JOIN monthly_inventory_report mir 
+    ON tr.store_name = mir.store_name AND tr.year_month = mir.inventory_year_month
 ORDER BY tr.store_name, tr.year_month;
