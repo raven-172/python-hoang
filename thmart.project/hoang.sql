@@ -100,7 +100,7 @@ CREATE TABLE stock_take_list (
     stock_take_date TIMESTAMP,
     process_date TIMESTAMP,
     stock_take_value NUMERIC(100,2)
-);
+); 
 
 /*Import data presented information about STORES'S INVENTORY CHECK*/
 COPY stock_take_list(store_id, stock_take_id, stock_take_date, process_date, stock_take_value)
@@ -143,43 +143,87 @@ SELECT * FROM inventory_report;
 
 /*Query information that show needed insights*/
 WITH
-    sum_report AS (
+    daily_sale_report AS (
         SELECT
-            s.store_name,
-            i.invoice_id,
-            i.invoice_date,
-            i.invoice_value,
-            i.invoice_discount,
-            r.return_value
-        FROM invoices_list i
-        LEFT JOIN store_list s ON s.store_id = i.store_id
-        LEFT JOIN returns_list r ON r.return_id = i.return_id
+            sl.store_name,
+            DATE(il.invoice_date) AS sale_date,
+            EXTRACT(EPOCH FROM(MAX(il.invoice_date) - MIN(il.invoice_date)))/3600 AS operating_time_day,
+            COUNT(*) AS num_sale_day,
+            SUM(il.invoice_value) AS total_income_day,
+            COALESCE(SUM(il.invoice_discount),0) AS total_discount_day
+        FROM invoices_list il 
+        LEFT JOIN store_list sl ON sl.store_id = il.store_id
+        GROUP BY DATE(il.invoice_date), sl.store_name
+        HAVING EXTRACT(EPOCH FROM(MAX(il.invoice_date) - MIN(il.invoice_date)))/3600 > 0
     ),
 
-    daily_report AS (
+    daily_return_report AS (
+        SELECT  
+            sl.store_name,
+            DATE(rl.return_date) AS return_day,
+            SUM(rl.return_value) AS total_return_value_day
+        FROM returns_list rl
+        LEFT JOIN store_list sl ON sl.store_id = rl.store_id
+        GROUP BY DATE(rl.return_date), sl.store_name
+    ),
+
+    daily_damage_report AS (
         SELECT
-            store_name,
-            DATE(invoice_date) AS sale_date,
-            EXTRACT(EPOCH FROM(MAX(invoice_date) - MIN(invoice_date)))/3600 AS operating_time_day,
-            COUNT(*) AS num_invoice_day,
-            SUM(invoice_value) AS total_income_day,
-            SUM(invoice_discount) AS total_discount_day,
-            SUM(return_value) AS total_return_day
-        FROM sum_report
-        GROUP BY sale_date, store_name
-        HAVING EXTRACT(EPOCH FROM(MAX(invoice_date) - MIN(invoice_date)))/3600 > 0
-    )
+            sl.store_name,
+            DATE(dl.damage_date) AS damage_day,
+            SUM(dl.damage_value) AS total_damage_value_day
+        FROM damage_list dl
+        LEFT JOIN store_list sl ON sl.store_id = dl.store_id
+        GROUP BY DATE(dl.damage_date), sl.store_name
+    ),
+
+    daily_check_report AS (
+        SELECT
+            sl.store_name,
+            DATE(stl.stock_take_date) AS check_date,
+            SUM(stl.stock_take_value) AS total_check_value_day
+        FROM stock_take_list stl
+        LEFT JOIN store_list sl ON sl.store_id = stl.store_id
+        GROUP BY DATE(stl.stock_take_date), sl.store_name
+    ),
+
+    monthly_inventory_report AS (
+        SELECT
+            sl.store_name,
+            DATE(ir.report_date) AS inventory_verify_date,
+            ir.inventory_value AS begin_inventory_value
+        FROM inventory_report ir
+        LEFT JOIN store_list sl ON sl.store_id = ir.store_id
+    )   
 
 SELECT
-    store_name,
-    EXTRACT(YEAR FROM sale_date) AS sale_year,
-    EXTRACT(MONTH FROM sale_date) AS sale_month,
-    SUM(total_income_day - COALESCE(total_discount_day,0) - COALESCE(total_return_day,0)) AS net_revenue,
-    ROUND(AVG(operating_time_day),2) AS operating_time,
-    FLOOR(COALESCE(SUM(num_invoice_day)/NULLIF(SUM(operating_time_day),0),0)) AS sale_per_hour,
-    ROUND(SUM(total_income_day - COALESCE(total_discount_day,0) - COALESCE(total_return_day,0))/SUM(num_invoice_day),2) AS avg_value_sale,
-    ROUND(SUM(COALESCE(total_discount_day,0))/SUM(total_income_day),2) AS discount_rate,
-    SUM(COALESCE(total_return_day,0)) AS return_value_month
-FROM daily_report
-GROUP BY store_name, sale_year, sale_month;
-
+    dsr.store_name,
+    EXTRACT(YEAR FROM dsr.sale_date) AS the_year,
+    EXTRACT(MONTH FROM dsr.sale_date) AS the_month,
+    SUM(dsr.total_income_day)
+        - SUM(COALESCE(dsr.total_discount_day,0))
+        - SUM(COALESCE(drr.total_return_value_day,0)) AS net_income,
+    ROUND(AVG(dsr.operating_time_day),2) AS avg_operating_time,
+    FLOOR(COALESCE(SUM(dsr.num_sale_day)/SUM(dsr.operating_time_day),0)) AS sale_per_hour,
+    ROUND(COALESCE(
+        (SUM(dsr.total_income_day)
+        - SUM(COALESCE(dsr.total_discount_day,0))
+        - SUM(COALESCE(drr.total_return_value_day,0)))/NULLIF(SUM(dsr.num_sale_day),0)
+    ,0),2) AS avg_value_per_sale,
+    ROUND(COALESCE(
+        SUM(COALESCE(dsr.total_discount_day,0))/NULLIF(
+            SUM(dsr.total_income_day)
+            - SUM(COALESCE(dsr.total_discount_day,0))
+            - SUM(COALESCE(drr.total_return_value_day,0)),0)
+    ,0),2) AS discount_rate,
+    SUM(COALESCE(drr.total_return_value_day,0)) AS return_value_month,
+    SUM(COALESCE(ddr.total_damage_value_day,0)) AS damage_value_month,
+    SUM(COALESCE(dcr.total_check_value_day,0)) AS diff_value_month,
+    SUM(COALESCE(mir.begin_inventory_value,0)) AS inventory_value_ready
+FROM daily_sale_report dsr
+LEFT JOIN daily_return_report drr ON drr.store_name = dsr.store_name AND drr.return_day = dsr.sale_date
+LEFT JOIN daily_damage_report ddr ON ddr.store_name = ddr.store_name AND ddr.damage_day = dsr.sale_date
+LEFT JOIN daily_check_report dcr ON dcr.store_name = dsr.store_name AND dcr.check_date = dsr.sale_date
+LEFT JOIN monthly_inventory_report mir ON mir.store_name = dsr.store_name AND mir.inventory_verify_date = dsr.sale_date
+GROUP BY dsr.store_name, the_year, the_month
+ORDER BY dsr.store_name, the_year, the_month;
