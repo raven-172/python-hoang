@@ -334,3 +334,39 @@ DELIMITER ',' CSV HEADER;
 
 SELECT * FROM inventory_report;
 
+/*.10. Create Return_List*/
+/*a. Create table*/
+
+CREATE TABLE Return_List(
+    Return_number VARCHAR(50) PRIMARY KEY,
+    Invoice_number VARCHAR(50),
+    Return_time TIMESTAMP, 
+    Customer_number VARCHAR(100),
+    Store_id VARCHAR(50),
+    Return_sub_total NUMERIC(10,2),
+    Return_discount NUMERIC(10,2),
+    Return_sub_total_after_discount NUMERIC(10,2),
+    Refunded_to_customer NUMERIC(10,2),
+    FOREIGN KEY (Store_id) REFERENCES Store_List(Store_id),
+    FOREIGN KEY (Invoice_number) REFERENCES Invoice_List(Invoice_number),
+    FOREIGN KEY (Customer_number) REFERENCES Customer_List(Customer_number)
+);
+
+/*b. Import data*/
+
+COPY Return_List(
+    Return_number,
+    Invoice_number,
+    Return_time, 
+    Customer_number,
+    Store_id,
+    Return_sub_total,
+    Return_discount,
+    Return_sub_total_after_discount,
+    Refunded_to_customer)
+FROM 'C:/thmart_csv/return_list.csv'
+DELIMITER ',' CSV HEADER;
+
+/*c. Check*/
+
+SELECT * FROM Return_List;
